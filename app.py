@@ -5,12 +5,27 @@ import requests
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
+from huggingface_hub import hf_hub_download
+
 
 load_dotenv()
 
-TMDB_API_KEY = os.getenv("TMDB_API_KEY")
+def get_secret(name):
+    try:
+        value = st.secrets.get(name)
+        if value:
+            return str(value)
+    except Exception:
+        pass
+
+    return os.getenv(name)
+
+TMDB_API_KEY = get_secret("TMDB_API_KEY")
+HF_TOKEN = get_secret("HF_TOKEN")
+
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/w500"
+
 
 st.set_page_config(
     page_title="CineMatch",
@@ -27,7 +42,23 @@ def load_data():
     with open("movie_dict.pkl", "rb") as file:
         movie_dict = pickle.load(file)
 
-    with open("similarity.pkl", "rb") as file:
+    # Use the local file if available; otherwise download from Hugging Face.
+    if os.path.exists("similarity.pkl"):
+        similarity_path = "similarity.pkl"
+    else:
+        if not HF_TOKEN:
+            raise ValueError(
+                "HF_TOKEN is missing. Add it to Streamlit Cloud Secrets."
+            )
+
+        similarity_path = hf_hub_download(
+            repo_id="23Anubhav/cinematch-models",
+            filename="similarity.pkl",
+            repo_type="dataset",
+            token=HF_TOKEN,
+        )
+
+    with open(similarity_path, "rb") as file:
         similarity = pickle.load(file)
 
     movies = pd.DataFrame(movie_dict).reset_index(drop=True)
@@ -42,6 +73,7 @@ def load_data():
         raise ValueError("The similarity matrix must be square.")
 
     return movies, movies_details, similarity
+
 
 
 try:
